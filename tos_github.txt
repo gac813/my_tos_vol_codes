@@ -1,0 +1,114 @@
+declare lower;
+
+input n = 30; #n periods
+input k = 10; #k periods
+input m = 5; #m periods
+def c = close;
+def co = close[1];
+def h = high;
+def l = low;
+def o = open;
+def pi = Double.Pi;
+input dte = 30; #full days left till expiry
+
+def t = If(SecondsFromTime(0930) > 0, SecondsTillTime(1600) / 23400, 1);
+input dte = 30; #time to expiry
+
+def IV = If(IsNaN(SeriesVolatility(series = 1)), IV[1], SeriesVolatility(series = 1));
+
+def IV30 = If(IsNaN(SeriesVolatility(series = 23)), IV[22], SeriesVolatility(series = 23)); #series is SPX specific, change series for corresponding
+
+AddLabel(1, "SeriesIV1 = " + AsPercent(IV), Color.WHITE);
+
+#Implied Avg Daily Move
+
+plot ImpMove = (c * IV * Sqrt(t) * Sqrt(1 / 365) * Sqrt(2 / pi));
+ImpMove.SetDefaultColor(Color.VIOLET);
+
+plot ImpMove30 = (c * IV30 * Sqrt(dte + t) * Sqrt(1 / 365) * Sqrt(2 / pi));
+ImpMove30.SetDefaultColor(Color.ORANGE);
+
+def ImpAvgDailyMove = IV * Sqrt( t / 365) * Sqrt(2 / pi);
+
+def ImpAvg30dMove = IV * Sqrt((dte + t) / (365)) * Sqrt(2 / pi);
+
+#GKYZ volatility formula before Sqrt
+def GKYZ = Power(Log(o[n] / co[n - 1]), 2) + 0.5 * Power(Log(h[n] / l[n]), 2) - 2 * (Log(2) - 1) * Power(Log(c[n] / o[n]), 2);
+
+
+def rvol = Average(GKYZ, n);
+plot rvol30 = Sqrt(rvol) * Sqrt(252) * Sqrt(2 / pi);
+rvol30.SetDefaultColor(Color.GREEN);
+
+#TOS IV function times .7987 
+plot impvol = ImpVolatility();
+plot dailyiv = ImpVolatility() * Sqrt(2 / pi);
+
+
+#
+#
+#
+#Repeating above for various periods
+
+
+
+def GKYZk = Power(Log(o[k] / co[k - 1]), 2) + 0.5 * Power(Log(h[k] / l[k]), 2) - 2 * (Log(2) - 1) * Power(Log(c[k] / o[k]), 2);
+
+def rvolk = Average(GKYZk, k);
+plot rvol10 = Sqrt(rvolk) * Sqrt(252) * Sqrt(2 / pi);
+
+def GKYZm = Power(Log(o[m] / co[m - 1]), 2) + 0.5 * Power(Log(h[m] / l[m]), 2) - 2 * (Log(2) - 1) * Power(Log(c[m] / o[m]), 2);
+
+def rvolm = Average(GKYZm, m);
+plot rvol5 = Sqrt(rvolm) * Sqrt(252) * Sqrt(2 / pi);
+
+def GKYZ1 = Power(Log(o[1] / co[1 - 1]), 2) + 0.5 * Power(Log(h[1] / l[1]), 2) - 2 * (Log(2) - 1) * Power(Log(c[1] / o[1]), 2);
+
+def rvar1 = Average(GKYZ1, 1);
+plot rvol1 = Sqrt(rvol1) * Sqrt(252) * Sqrt(2 / pi);
+
+#example variance ratios
+plot varRatio = rvol5 / rvol30;
+def IVRV = rvol1 / dailyiv;
+plot IVRVratio = WMA(IVRV, 5);
+plot MedianLINE = Median(IVRV, 252);
+
+#example alert for changes in rv-iv spread
+
+def rv_cross = if IVRVratio crosses above MedianLINE then 1  else if IVRVratio crosses below MedianLINE then -1 else 0;
+
+plot UpStep = rv_cross == 1;
+plot DownStep = rv_cross == -1;
+
+UpStep.SetPaintingStrategy(PaintingStrategy.HISTOGRAM);
+UpStep.SetDefaultColor(Color.WHITE);
+UpStep.SetLineWeight(2);
+DownStep.SetPaintingStrategy(PaintingStrategy.HISTOGRAM);
+DownStep.SetDefaultColor(Color.YELLOW);
+DownStep.SetLineWeight(2);
+
+
+
+#Labels 
+
+AddLabel(1, "ImpDay%Move= +/- " + AsPercent(ImpAvgDailyMove), Color.WHITE);
+AddLabel(1, "ImpDayMove= +/- " + AsPrice(ImpMove), Color.CYAN);
+
+AddLabel(1, "Imp30d%Move= +/- " + AsPercent(ImpAvg30dMove), Color.LIGHT_GRAY);
+AddLabel(1, "Imp30dMove= +/- " + AsPrice(ImpMove30), Color.ORANGE);
+
+AddLabel(1, "30drvol= " + AsPercent(rvol30), Color.LIGHT_GREEN);
+AddLabel(1, "10drvol= " + AsPercent(rvol10), Color.LIGHT_GREEN);
+AddLabel(1, "5drvol= " + AsPercent(rvol5), Color.BLUE);
+AddLabel(1, "1drvol= " + AsPercent(rvol1), Color.LIGHT_ORANGE);
+AddLabel(1, "IV_day= " + AsPercent(dailyiv), Color.RED);
+AddLabel(1, "VarRatio= " + (rvol1 / rvol30), Color.PINK);
+
+
+
+#spot-vol correlation example
+def vol_ret = Log(imp_volatility() / imp_volatility()[1]);
+def spot_ret = Log(close() / close()[1]);
+plot corr = Correlation(spot_ret, vol_ret, 2);
+corr.SetPaintingStrategy(PaintingStrategy.HISTOGRAM);
+corr.setdefaultColor(color.yellow);
